@@ -1,0 +1,2 @@
+# EzVaults
+Unturned vaults plugin
