@@ -188,15 +188,17 @@ namespace EzVaults
                     //RCooldowns.Add(c);
                     if (Instance.Configuration.Instance.CacheTime > 0) PlayTimers.Add(new TimerEventHook());
                 }
-
-                Player.Player.inventory.updateItems((byte)(Player.IsInVehicle? Instance.Configuration.Instance.AllowVehicle : 7), vaultItems);
-                Player.Player.inventory.sendStorage();
+                Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
+                {
+                    Player.Player.inventory.updateItems((byte)(Player.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), vaultItems);
+                    Player.Player.inventory.sendStorage();
+                });
             }
             else
             {
-                Rocket.Unturned.Chat.UnturnedChat.Say(Player, "Invalid vault.", EzVaults.Instance.Configuration.Instance.Color, true);
+                Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() => Rocket.Unturned.Chat.UnturnedChat.Say(Player, "Invalid vault.", EzVaults.Instance.Configuration.Instance.Color, true));
             }
-            Player.Player.equipment.dequip();
+            Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() => Player.Player.equipment.dequip());
         }
         public void SavePlayer(UnturnedPlayer P, bool a = false)
         {
