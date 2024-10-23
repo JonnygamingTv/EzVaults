@@ -13,12 +13,12 @@ namespace EzVaults
 {
     public class EzVaults : RocketPlugin<EzVaultsConfig>
     {
-        public static List<bool> vaultBkp = new List<bool>();
-        public static List<int> vaultCurrent = new List<int>();
-        public static List<Items> VaultItems = new List<Items>();
-        public static List<Items> VaultItemCache = new List<Items>();
-        public static List<UnturnedPlayer> vaultOwners = new List<UnturnedPlayer>();
-        public static List<TimerEventHook> PlayTimers = new List<TimerEventHook>();
+        public static Dictionary<UnturnedPlayer, bool> vaultBkp = new Dictionary<UnturnedPlayer, bool>();
+        public static Dictionary<UnturnedPlayer, int> vaultCurrent = new Dictionary<UnturnedPlayer, int>();
+        public static Dictionary<UnturnedPlayer, Items> VaultItems = new Dictionary<UnturnedPlayer, Items>();
+        public static Dictionary<UnturnedPlayer, Items> VaultItemCache = new Dictionary<UnturnedPlayer, Items>();
+        public static Dictionary<UnturnedPlayer, TimerEventHook> PlayTimers = new Dictionary<UnturnedPlayer, TimerEventHook>();
+        public static Dictionary<UnturnedPlayer, Items> VaultCache = new Dictionary<UnturnedPlayer, Items>();
         //public static List<Rocket.API.IRocketCommand> RCooldowns = new List<Rocket.API.IRocketCommand>();
         public static EzVaults Instance { get; private set; }
         public string dir;
@@ -59,7 +59,8 @@ namespace EzVaults
 #if DEBUG
             UnturnedPlayerEvents.OnPlayerInventoryUpdated -= PIU;
 #endif
-            for (int i = 0; i < vaultOwners.Count; i++) SavePlayer(vaultOwners[i]);
+            foreach (UnturnedPlayer player in vaultCurrent.Keys)
+                SavePlayer(player);
         }
         public override TranslationList DefaultTranslations => new TranslationList
         {
@@ -89,8 +90,8 @@ namespace EzVaults
                 string SVault = Instance.Configuration.Instance.Vaulter[x].Name;
                 Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() => Rocket.Unturned.Chat.UnturnedChat.Say(Player, "Opening vault: " + SVault, EzVaults.Instance.Configuration.Instance.Color, true));
                 Items vaultItems;
-                int vOP = vaultOwners.IndexOf(Player);
-                if (vOP!=-1) { vaultItems = VaultItems[vOP]; if (Instance.Configuration.Instance.CacheTime>0&&PlayTimers[vOP] != null) PlayTimers[vOP].CancelTimer();
+                if(VaultCache.TryGetValue(Player, out vaultItems)){
+                    if (Instance.Configuration.Instance.CacheTime>0 && PlayTimers.TryGetValue(Player, out TimerEventHook _g) && _g != null) _g.CancelTimer();
 #if DEBUG
                 Rocket.Core.Logging.Logger.Log("Cache..");
 #endif
@@ -161,19 +162,19 @@ namespace EzVaults
                     }
                     if (Instance.Configuration.Instance.ManualHandler)
                     {
-                        vaultBkp.Add(!Instance.Configuration.Instance.PickupActivateEvents);
+                        vaultBkp.Add(Player, !Instance.Configuration.Instance.PickupActivateEvents);
                         int ps = VaultItemCache.Count;
                         Items _vaultItems = vaultItems;
-                        VaultItemCache.Add(_vaultItems);
+                        VaultItemCache.Add(Player, _vaultItems);
                         vaultItems.onItemAdded = (byte page, byte index, ItemJar jar) =>
                         {
                             Rocket.Core.Logging.Logger.Log(jar.interactableItem.name+" item added to "+Player.DisplayName+"'s vault: "+page+" / "+index);
-                            VaultItemCache[ps].addItem(jar.x,jar.y,jar.rot,jar.item);
+                            VaultItemCache[Player].addItem(jar.x,jar.y,jar.rot,jar.item);
                         };
                         vaultItems.onItemRemoved = (byte page, byte index, ItemJar jar) =>
                         {
                             Rocket.Core.Logging.Logger.Log(jar.interactableItem.name + " item removed from " + Player.DisplayName + "'s vault: " + page + " / " + index);
-                            VaultItemCache[ps].removeItem(index);
+                            VaultItemCache[Player].removeItem(index);
                         };
                         vaultItems.onItemUpdated = (byte page, byte index, ItemJar jar) =>
                         {
@@ -182,11 +183,10 @@ namespace EzVaults
                         };
                         vaultItems.onStateUpdated += OnVaultStorageUpdated(Player, SVault, x, vaultItems);
                     }
-                    vaultOwners.Add(Player);
-                    VaultItems.Add(vaultItems);
-                    vaultCurrent.Add(x);
+                    VaultItems.Add(Player, vaultItems);
+                    vaultCurrent.Add(Player, x);
                     //RCooldowns.Add(c);
-                    if (Instance.Configuration.Instance.CacheTime > 0) PlayTimers.Add(new TimerEventHook());
+                    if (Instance.Configuration.Instance.CacheTime > 0) PlayTimers.Add(Player, new TimerEventHook());
                 }
                 Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
                 {
@@ -203,76 +203,56 @@ namespace EzVaults
         public void SavePlayer(UnturnedPlayer P, bool a = false)
         {
             P.Player.equipment.dequip();
-            int x = vaultOwners.IndexOf(P);
-            if (x != -1)
+            if (VaultItems.TryGetValue(P, out Items _Items))
             {
                 string res="";
-                //Rocket.Core.Logging.Logger.Log(P.DisplayName + ":" + vaultCurrent[x] + "; " + VaultItemCache[x].items.Count);
-                //Rocket.Core.R.Commands.SetCooldown(P, RCooldowns[x]);
-                /*Items vaultItems;
-                if (Configuration.Instance.ManualHandler)
+                for (byte i = 0; i < _Items.getItemCount(); i++)
                 {
-                    for (int i = 0; i < VaultItemCache[x].items.Count; i++)
-                    {
-
-                    }
-                }
-                else
-                {
-                    vaultItems = VaultItems[x];
-                }*/
-                for (byte i = 0; i < VaultItems[x].getItemCount(); i++)
-                {
-                    ItemJar it = VaultItems[x].getItem(i);
+                    ItemJar it = _Items.getItem(i);
                     res += (i==0?"":",")+it.item.id+"."+ it.x+"."+ it.y+"."+ it.rot+"."+it.item.amount+"."+it.item.durability+"."+it.item.quality;
                     for (int ii = 0; ii < it.item.metadata.Length; ii++) { res += "."+it.item.metadata[ii]; }
                 }
-                try{File.WriteAllText(Path.Combine(Directory, "vaults", EzVaults.Instance.Configuration.Instance.Vaulter[vaultCurrent[x]].Name, P.Id), res);}catch(System.Exception e){ Rocket.Core.Logging.Logger.Log(vaultCurrent[x].ToString()+": "+vaultOwners[x].DisplayName+"\n"); Rocket.Core.Logging.Logger.LogError(e.StackTrace);}
+                try{File.WriteAllText(Path.Combine(Directory, "vaults", EzVaults.Instance.Configuration.Instance.Vaulter[vaultCurrent[P]].Name, P.Id), res);}catch(System.Exception e){ Rocket.Core.Logging.Logger.Log(vaultCurrent[P].ToString()+": "+P.DisplayName+"\n"); Rocket.Core.Logging.Logger.LogError(e.StackTrace);}
                 P.Player.inventory.updateItems((byte)(P.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), null);
                 P.Player.inventory.sendStorage();
                 P.Inventory.closeStorageAndNotifyClient();
                 if (Configuration.Instance.CacheTime==0)
                 {
-                    vaultCurrent.RemoveAt(x);
-                    vaultOwners.RemoveAt(x);
-                    VaultItems.RemoveAt(x);
+                    vaultCurrent.Remove(P);
+                    VaultItems.Remove(P);
                     if (Configuration.Instance.ManualHandler)
                     {
-                        VaultItemCache.RemoveAt(x);
-                        vaultBkp.RemoveAt(x);
+                        VaultItemCache.Remove(P);
+                        vaultBkp.Remove(P);
                     }
                 }
                 else if (a) {
-                    vaultCurrent.RemoveAt(x);
-                    vaultOwners.RemoveAt(x);
-                    VaultItems.RemoveAt(x);
-                    PlayTimers.RemoveAt(x);
+                    vaultCurrent.Remove(P);
+                    VaultItems.Remove(P);
+                    PlayTimers.Remove(P);
                     if (Configuration.Instance.ManualHandler)
                     {
-                        VaultItemCache.RemoveAt(x);
-                        vaultBkp.RemoveAt(x);
+                        VaultItemCache.Remove(P);
+                        vaultBkp.Remove(P);
                     }
                 }
-                else if(PlayTimers[x] !=null)
+                else if(PlayTimers.TryGetValue(P, out TimerEventHook timer) && timer !=null)
                 {
-                    PlayTimers[x].SetTimer(Configuration.Instance.CacheTime);
+                    PlayTimers[P].SetTimer(Configuration.Instance.CacheTime);
                     //PlayTimers[x].OnTimerTriggered.Invoke(FinishVault(x));
-                    PlayTimers[x].OnTimerTriggered.AddListener(FinishVault(x));
+                    PlayTimers[P].OnTimerTriggered.AddListener(FinishVault(P));
                 }
             }
         }
-        private UnityEngine.Events.UnityAction FinishVault(int x) {
-            //yield return new WaitForSeconds(Configuration.Instance.CacheTime);
-            //UnityEngine.Events.UnityAction g = new UnityEngine.Events.UnityAction<int>(FV2(x));
-            vaultCurrent.RemoveAt(x);
-            vaultOwners.RemoveAt(x);
-            VaultItems.RemoveAt(x);
+        private UnityEngine.Events.UnityAction FinishVault(UnturnedPlayer P) {
+            vaultCurrent.Remove(P);
+            VaultItems.Remove(P);
             if (Configuration.Instance.ManualHandler)
             {
-                VaultItemCache.RemoveAt(x);
-                vaultBkp.RemoveAt(x);
+                VaultItemCache.Remove(P);
+                vaultBkp.Remove(P);
             }
-            PlayTimers.RemoveAt(x);
+            PlayTimers.Remove(P);
             return null;
         }
         private int FV2(int x)
@@ -297,40 +277,34 @@ namespace EzVaults
 #if DEBUG
             Rocket.Core.Logging.Logger.Log(P.DisplayName + ":" + I.item.id + ", added " + inventoryIndex+" to "+inventoryGroup);
 #endif
-            int x = vaultOwners.IndexOf(P);
-            if (x != -1)
-                if (inventoryGroup == Rocket.Unturned.Enumerations.InventoryGroup.Storage) if (vaultBkp[x])
-                    {
-                        VaultItems[x].items.Add(I);//VaultItemCache[x].items.Add(I);
-                    }
+            if (VaultItems.TryGetValue(P, out Items items) && inventoryGroup == Rocket.Unturned.Enumerations.InventoryGroup.Storage && vaultBkp[P])
+            {
+                items.items.Add(I);
+            }
         }
         void PIR(UnturnedPlayer P, Rocket.Unturned.Enumerations.InventoryGroup inventoryGroup, byte inventoryIndex, ItemJar I)
         {
 #if DEBUG
             Rocket.Core.Logging.Logger.Log(P.DisplayName + ":" + I.item.id + ", removed " + inventoryIndex + " from " + inventoryGroup);
 #endif
-            int x = vaultOwners.IndexOf(P);
-            if (x != -1)
-                if (inventoryGroup == Rocket.Unturned.Enumerations.InventoryGroup.Storage) if (vaultBkp[x])
-                    {
-                        //VaultItemCache[x]
-                        VaultItems[x].removeItem(inventoryIndex);
-                    }
+            if (VaultItems.TryGetValue(P, out Items items) && inventoryGroup == Rocket.Unturned.Enumerations.InventoryGroup.Storage && vaultBkp[P])
+            {
+                items.removeItem(inventoryIndex);
+            }
         }
         void PIU(UnturnedPlayer P, Rocket.Unturned.Enumerations.InventoryGroup inventoryGroup, byte inventoryIndex, ItemJar I)
         {
             Rocket.Core.Logging.Logger.Log(P.DisplayName + ":" + I.item.id);
             Rocket.Core.Logging.Logger.Log(inventoryGroup+": "+inventoryIndex);
-            int x = vaultOwners.IndexOf(P);string bonus = "";if (x != -1) bonus = VaultItems[x].items.Count.ToString();
+            string bonus = "";if (VaultItems.TryGetValue(P, out Items items)) bonus = items.items.Count.ToString();
             Rocket.Core.Logging.Logger.Log(", "+bonus);
         }
         void TIRH(Player player, byte x, byte y, uint instanceID, byte to_x, byte to_y, byte to_rot, byte to_page, ItemData itemData, ref bool shouldAllow)
         {
             UnturnedPlayer P = UnturnedPlayer.FromPlayer(player);
-            int i = vaultOwners.IndexOf(P);
-            if (i != -1)
+            if (vaultCurrent.ContainsKey(P))
             {
-                if(Configuration.Instance.PickupActivateEvents) vaultBkp[i] = true;
+                if(Configuration.Instance.PickupActivateEvents) vaultBkp[P] = true;
                 if (Configuration.Instance.CancelPickup) shouldAllow = false;
                 if (Configuration.Instance.CloseVaultOnPickup) P.Inventory.closeStorageAndNotifyClient();
             }
