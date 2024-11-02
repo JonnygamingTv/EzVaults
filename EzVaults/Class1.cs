@@ -162,10 +162,10 @@ namespace EzVaults
                     }
                     if (Instance.Configuration.Instance.ManualHandler)
                     {
-                        vaultBkp.Add(Player, !Instance.Configuration.Instance.PickupActivateEvents);
+                        vaultBkp[Player] = !Instance.Configuration.Instance.PickupActivateEvents;
                         int ps = VaultItemCache.Count;
                         Items _vaultItems = vaultItems;
-                        VaultItemCache.Add(Player, _vaultItems);
+                        VaultItemCache[Player] = _vaultItems;
                         vaultItems.onItemAdded = (byte page, byte index, ItemJar jar) =>
                         {
                             Rocket.Core.Logging.Logger.Log(jar.interactableItem.name+" item added to "+Player.DisplayName+"'s vault: "+page+" / "+index);
@@ -183,10 +183,10 @@ namespace EzVaults
                         };
                         vaultItems.onStateUpdated += OnVaultStorageUpdated(Player, SVault, x, vaultItems);
                     }
-                    VaultItems.Add(Player, vaultItems);
-                    vaultCurrent.Add(Player, x);
+                    VaultItems[Player] = vaultItems;
+                    vaultCurrent[Player] = x;
                     //RCooldowns.Add(c);
-                    if (Instance.Configuration.Instance.CacheTime > 0) PlayTimers.Add(Player, new TimerEventHook());
+                    if (Instance.Configuration.Instance.CacheTime > 0) PlayTimers[Player] = new TimerEventHook();
                 }
                 Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
                 {
