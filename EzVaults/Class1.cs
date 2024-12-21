@@ -70,16 +70,16 @@ namespace EzVaults
             {$"{EResponse.VAULT_NOT_FOUND}", "Vault not found!"},
             {$"{EResponse.VAULTS}", "Vaults ({0}): {1}"},
         };
-        private void Playerded(UnturnedPlayer player, EDeathCause cause, ELimb limb, Steamworks.CSteamID murderer)
+        private async void Playerded(UnturnedPlayer player, EDeathCause cause, ELimb limb, Steamworks.CSteamID murderer)
         {
-            SavePlayer(player);
+            await System.Threading.Tasks.Task.Run(() => SavePlayer(player));
         }
-        private void DisConn(UnturnedPlayer player) { SavePlayer(player,true); }
-        void PlayerUpdateGesture(UnturnedPlayer player, UnturnedPlayerEvents.PlayerGesture gesture)
+        private async void DisConn(UnturnedPlayer player) { await System.Threading.Tasks.Task.Run(()=> SavePlayer(player,true)); }
+        async void PlayerUpdateGesture(UnturnedPlayer player, UnturnedPlayerEvents.PlayerGesture gesture)
         {
             if (gesture.GetHashCode() !=1)
             {
-                SavePlayer(player);
+                await System.Threading.Tasks.Task.Run(() => SavePlayer(player));
             }
         }
 
@@ -202,11 +202,10 @@ namespace EzVaults
         }
         public void SavePlayer(UnturnedPlayer P, bool a = false)
         {
-            P.Player.equipment.dequip();
+            Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() => P.Player.equipment.dequip());
             if (VaultItems.TryGetValue(P, out Items _Items))
             {
                 string res="";
-                System.Threading.Tasks.Task.Run(() => {
                 for (byte i = 0; i < _Items.getItemCount(); i++)
                 {
                     ItemJar it = _Items.getItem(i);
@@ -214,10 +213,12 @@ namespace EzVaults
                     for (int ii = 0; ii < it.item.metadata.Length; ii++) { res += "."+it.item.metadata[ii]; }
                 }
                 try{File.WriteAllText(Path.Combine(Directory, "vaults", EzVaults.Instance.Configuration.Instance.Vaulter[vaultCurrent[P]].Name, P.Id), res);}catch(System.Exception e){ Rocket.Core.Logging.Logger.Log(vaultCurrent[P].ToString()+": "+P.DisplayName+"\n"); Rocket.Core.Logging.Logger.LogError(e.StackTrace);}
+                Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
+                {
+                    P.Player.inventory.updateItems((byte)(P.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), null);
+                    P.Player.inventory.sendStorage();
+                    P.Inventory.closeStorageAndNotifyClient();
                 });
-                P.Player.inventory.updateItems((byte)(P.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), null);
-                P.Player.inventory.sendStorage();
-                P.Inventory.closeStorageAndNotifyClient();
                 if (Configuration.Instance.CacheTime==0)
                 {
                     vaultCurrent.Remove(P);
@@ -310,8 +311,10 @@ namespace EzVaults
                 if (Configuration.Instance.CancelPickup) shouldAllow = false;
                 if (Configuration.Instance.CloseVaultOnPickup)
                 {
-                    SavePlayer(P);
-                    // P.Inventory.closeStorageAndNotifyClient();
+                    P.Player.inventory.updateItems((byte)(P.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), null);
+                    P.Player.inventory.sendStorage();
+                    P.Inventory.closeStorageAndNotifyClient();
+                    System.Threading.Tasks.Task.Run(() => SavePlayer(P));
                 }
             }
         }
