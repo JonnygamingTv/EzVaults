@@ -37,6 +37,7 @@ namespace EzVaults
             Rocket.Unturned.U.Events.OnPlayerDisconnected += DisConn;
             UnturnedPlayerEvents.OnPlayerDeath += Playerded;
             ItemManager.onTakeItemRequested += TIRH;
+            PlayerEquipment.OnUseableChanged_Global += PERH;
             if (Configuration.Instance.ManualHandler)
             {
                 UnturnedPlayerEvents.OnPlayerInventoryAdded += PIA;
@@ -54,6 +55,7 @@ namespace EzVaults
             Rocket.Unturned.U.Events.OnPlayerDisconnected -= DisConn;
             UnturnedPlayerEvents.OnPlayerDeath -= Playerded;
             ItemManager.onTakeItemRequested -= TIRH;
+            PlayerEquipment.OnUseableChanged_Global -= PERH;
             UnturnedPlayerEvents.OnPlayerInventoryAdded -= PIA;
             UnturnedPlayerEvents.OnPlayerInventoryRemoved -= PIR;
 #if DEBUG
@@ -202,7 +204,6 @@ namespace EzVaults
         }
         public void SavePlayer(UnturnedPlayer P, bool a = false)
         {
-            Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() => P.Player.equipment.dequip());
             if (VaultItems.TryGetValue(P, out Items _Items))
             {
                 string res="";
@@ -316,6 +317,17 @@ namespace EzVaults
                     P.Inventory.closeStorageAndNotifyClient();
                     System.Threading.Tasks.Task.Run(() => SavePlayer(P));
                 }
+            }
+        }
+        void PERH(PlayerEquipment equipment)
+        {
+            UnturnedPlayer P = UnturnedPlayer.FromPlayer(equipment.player);
+            if (equipment.itemID != 0 && vaultCurrent.ContainsKey(P))
+            {
+                P.Player.inventory.updateItems((byte)(P.IsInVehicle ? Instance.Configuration.Instance.AllowVehicle : 7), null);
+                P.Player.inventory.sendStorage();
+                P.Inventory.closeStorageAndNotifyClient();
+                System.Threading.Tasks.Task.Run(() => SavePlayer(P));
             }
         }
     }
