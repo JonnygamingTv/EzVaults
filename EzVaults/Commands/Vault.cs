@@ -33,6 +33,11 @@ namespace EzVaults.Commands
                 UnturnedChat.Say(Player, EzVaults.Instance.Translate(EResponse.IN_VEHICLE.ToString()), EzVaults.Instance.Configuration.Instance.Color, true);
                 return;
             }
+            if(EzVaults.Instance.Configuration.Instance.CacheTime == 0 && EzVaults.vaultCurrent.ContainsKey(Player))
+            {
+                UnturnedChat.Say(Player, EzVaults.Instance.Translate(EResponse.DUPE.ToString()), EzVaults.Instance.Configuration.Instance.Color, true);
+                return;
+            }
             List<int> PPerms = new List<int>();
             //for (int i = 0; i < EzVaults.Instance.Configuration.Instance.VaultPerms.Count; i++)
             //{
